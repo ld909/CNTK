@@ -1701,6 +1701,7 @@ public:
             auto sliceInputGrad = Input(0)->GradientFor(fr);
             m_dScale->Resize(scale);
             m_dBias->Resize(bias);
+
             // Compute all derivatives in one step. Save derivatives with respect to scale and bias in temp matrices.
             m_bnEng->Backward(sliceInputValue, sliceOutputGrad, sliceInputGrad, scale,
                                               *m_saveMean, *m_saveInvStdDev, *m_dScale, *m_dBias);
@@ -1709,12 +1710,14 @@ public:
         {
             // Derivative with respect to the scale was precomputed during input derivative computation.
             Matrix<ElemType>& grad = Input(1)->Gradient();
+            //grad.SetValue(0);
             grad.SetValue(grad.GetNumRows(), grad.GetNumCols(), grad.GetDeviceId(), m_dScale->Data());
         }
         else if (inputIndex == 2) // derivative with respect to the bias
         {
             // Derivative with respect to the bias was precomputed during input derivative computation.
             Matrix<ElemType>& grad = Input(2)->Gradient();
+            //grad.SetValue(0);
             grad.SetValue(grad.GetNumRows(), grad.GetNumCols(), grad.GetDeviceId(), m_dBias->Data());
         }
         // No derivatives with respect to running mean and InvStdDev.
@@ -1773,13 +1776,24 @@ public:
                 blendFactor = 1.0;
             else
                 blendFactor = m_blendTimeConst > 0 ? (m_blendTimeConst / (m_blendTimeConst + numSamples)) : 0;
-
+            
             m_saveMean->Resize(runMean);
             m_saveInvStdDev->Resize(runMean);
         }
 
         m_bnEng->Forward(sliceInputValue, scale, bias, expAvgFactor, blendFactor, runMean, runInvStdDev,
                          sliceOutputValue, m_epsilon, *m_saveMean, *m_saveInvStdDev);
+
+        //char buffer[100];
+        //std::wcstombs(buffer, m_nodeName.c_str(), m_nodeName.length());
+        //fprintf(stderr, "bn %s\n", buffer);
+        //sliceInputValue.Print("sliceInputValue", -3, -3, -3, -3);
+        //sliceOutputValue.Print("sliceOutputValue", -3, -3, -3, -3);
+        if (Environment().IsTraining() && expAvgFactor == 0 && blendFactor == 1.0)
+        {
+            m_saveMean->SetValue(runMean);
+            m_saveInvStdDev->SetValue(runInvStdDev);
+        }
 
         m_mbCount++;
     }
